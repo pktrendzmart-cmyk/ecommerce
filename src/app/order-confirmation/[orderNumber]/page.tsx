@@ -1,0 +1,7 @@
+import {cookies} from 'next/headers';
+import Link from 'next/link';
+import {privileged} from '@/lib/db';
+import {hash} from '@/lib/security';
+import {money} from '@/lib/model';
+export const metadata={title:'Order confirmation',robots:{index:false,follow:false}};
+export default async function Confirmation({params}:{params:Promise<{orderNumber:string}>}){const {orderNumber}=await params;const token=(await cookies()).get('receipt_'+orderNumber)?.value;if(!token)return <div className="wrap narrow section stack"><h1>Find your order</h1><p>For your privacy, confirm your order details through secure tracking.</p><Link className="button" href="/track">Track order</Link></div>;const {data:o,error}=await privileged().from('orders').select('order_number,total,currency,address,city,region,delivery_estimate').eq('order_number',orderNumber).eq('receipt_hash',hash(token)).maybeSingle();if(error||!o)return <div className="wrap section"><h1>Confirmation unavailable</h1><Link href="/track">Track your order</Link></div>;return <div className="wrap narrow section stack"><p className="eyebrow">Thank you</p><h1>Your order is in good hands.</h1><div className="panel stack"><p className="break-all">Order <strong>{o.order_number}</strong></p><h2>{money(o.total,o.currency)} due on arrival</h2><p>{o.address}<br/>{o.city}, {o.region}</p><p>{o.delivery_estimate}</p><p>Keep your order number. We’ll confirm your order before preparing it for delivery.</p></div><Link className="button" href="/track">Track your order</Link><Link href="/shop">Continue exploring</Link></div>;}

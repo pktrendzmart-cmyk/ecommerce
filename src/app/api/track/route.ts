@@ -1,0 +1,5 @@
+import {NextResponse} from 'next/server';
+import {z} from 'zod';
+import {privileged} from '@/lib/db';
+import {rate,sameOrigin} from '@/lib/security';
+export async function POST(req:Request){try{await sameOrigin();const p=z.object({order_number:z.string().trim().toUpperCase().regex(/^[A-F0-9]{20}$/),phone:z.string().trim().min(8).max(30)}).parse(await req.json());p.phone=p.phone.replace(/[\s()-]/g,'');await rate('track-number',p.order_number,10);await rate('track-phone',p.phone,10);const {data,error}=await privileged().from('orders').select('order_number,status,created_at,city,region,order_items(name,quantity),order_status_history(status,created_at)').eq('order_number',p.order_number).eq('phone',p.phone).maybeSingle();if(error||!data)throw new Error('No matching order found. Check the order number and mobile number.');return NextResponse.json(data,{headers:{'Cache-Control':'no-store'}});}catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Unable to track order.'},{status:400});}}

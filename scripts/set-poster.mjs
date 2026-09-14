@@ -1,0 +1,10 @@
+import fs from 'node:fs/promises';
+import {createClient} from '@supabase/supabase-js';
+const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
+const {data,error}=await db.from('store_settings').select('value').eq('id',1).single();if(error)throw error;
+await fs.writeFile('scripts/settings-before-poster.json',JSON.stringify(data.value,null,2));
+const path='campaigns/bestseller-humidifier.png';
+const upload=await db.storage.from('product-media').upload(path,await fs.readFile('public/bestseller-humidifier.png'),{contentType:'image/png',upsert:true});if(upload.error)throw upload.error;
+const {data:asset}=db.storage.from('product-media').getPublicUrl(path);
+const saved=await db.from('store_settings').update({value:{...data.value,poster_image:asset.publicUrl,poster_title:'Best seller',poster_eyebrow:'EVERYDAY COMFORT',poster_headline:'FLAME HUMIDIFIER',poster_link:'/products/rgb-flame-humidifier-and-aroma-diffuser'}}).eq('id',1);if(saved.error)throw saved.error;
+console.log('Poster settings saved.');

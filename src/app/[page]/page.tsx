@@ -1,0 +1,5 @@
+import {notFound} from 'next/navigation';
+import {settings} from '@/lib/db';
+const titles:Record<string,string>={about:'Our story',contact:'Here to help',faq:'Frequently asked questions','shipping-returns':'Shipping & returns',privacy:'Privacy policy',terms:'Terms of service'};
+export async function generateMetadata({params}:{params:Promise<{page:string}>}){const {page}=await params;return{title:titles[page],alternates:{canonical:'/'+page}};}
+export default async function Policy({params}:{params:Promise<{page:string}>}){const {page}=await params;if(!titles[page])notFound();const s=await settings();return <div className="wrap narrow section stack"><h1>{titles[page]}</h1>{['privacy','terms','shipping-returns'].includes(page)&&!s.policies_reviewed&&<p className="notice">Pending business review before launch.</p>}<div className="policy">{s[page as 'about']}</div>{page==='contact'&&<div className="stack">{s.support_email&&<a href={'mailto:'+s.support_email}>{s.support_email}</a>}{s.support_phone&&<a href={'tel:'+s.support_phone}>{s.support_phone}</a>}</div>}</div>;}

@@ -1,0 +1,78 @@
+create extension if not exists pgcrypto;
+create table profiles(id uuid primary key references auth.users on delete cascade,role text not null check(role in ('admin','customer')));
+create function is_admin() returns boolean language sql stable security definer set search_path=public as $$select exists(select 1 from profiles where id=auth.uid() and role='admin')$$;
+create table categories(id uuid primary key default gen_random_uuid(),name text not null,slug text unique not null,description text not null default '',image text not null default '',seo_title text not null default '',seo_description text not null default '',position int not null default 0,active boolean not null default true);
+create table products(id uuid primary key default gen_random_uuid(),name text not null,slug text unique not null,short_description text not null default '',description text not null default '',specifications text not null default '',category_id uuid references categories on delete restrict,price int not null check(price between 0 and 100000000),compare_at int check(compare_at>price),sku text unique not null,stock int not null check(stock>=0),status text not null default 'draft' check(status in ('draft','active','archived')),featured boolean not null default false,bestseller boolean not null default false,seo_title text not null default '',seo_description text not null default '',created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+create table product_images(id uuid primary key default gen_random_uuid(),product_id uuid not null references products on delete cascade,url text not null,alt text not null,position int not null default 0);
+create table product_variants(id uuid primary key default gen_random_uuid(),product_id uuid not null references products on delete restrict,name text not null,sku text unique not null,price int not null check(price between 0 and 100000000),stock int not null check(stock>=0),active boolean not null default true);
+create table store_settings(id int primary key check(id=1),value jsonb not null default '{}');
+insert into store_settings(id) values(1);
+create table shipping_rules(id uuid primary key default gen_random_uuid(),region text not null default '',city text not null default '',fee int not null check(fee>=0),active boolean not null default true);
+create table orders(id uuid primary key default gen_random_uuid(),order_number text unique not null default upper(encode(gen_random_bytes(10),'hex')),idempotency_key uuid unique not null,request_hash text not null,receipt_hash text not null,name text not null,phone text not null,email text not null default '',region text not null,city text not null,address text not null,landmark text not null default '',notes text not null default '',subtotal bigint not null,shipping int not null,total bigint not null,currency text not null,delivery_estimate text not null,status text not null default 'Pending' check(status in ('Pending','Confirmed','Processing','Shipped','Delivered','Cancelled','Returned')),created_at timestamptz not null default now());
+create table order_items(id uuid primary key default gen_random_uuid(),order_id uuid not null references orders on delete restrict,product_id uuid not null references products on delete restrict,variant_id uuid references product_variants on delete restrict,name text not null,sku text not null,price int not null,quantity int not null check(quantity>0));
+create table order_status_history(id uuid primary key default gen_random_uuid(),order_id uuid not null references orders on delete restrict,status text not null,changed_by uuid references auth.users,created_at timestamptz not null default now());
+create table rate_limits(key text primary key,window_start timestamptz not null,hits int not null);
+do $$declare t text;begin foreach t in array array['profiles','categories','products','product_images','product_variants','store_settings','shipping_rules','orders','order_items','order_status_history','rate_limits'] loop execute format('alter table %I enable row level security',t);end loop;end$$;
+create policy own_profile on profiles for select to authenticated using(id=auth.uid());
+do $$declare t text;begin foreach t in array array['categories','products','product_images','product_variants','store_settings','shipping_rules'] loop execute format('create policy admin_all on %I for all to authenticated using(is_admin()) with check(is_admin())',t);end loop;foreach t in array array['orders','order_items','order_status_history'] loop execute format('create policy admin_read on %I for select to authenticated using(is_admin())',t);end loop;end$$;
+create policy public_products on products for select to anon,authenticated using(status='active');
+create policy public_categories on categories for select to anon,authenticated using(active);
+create policy public_images on product_images for select to anon,authenticated using(exists(select 1 from products where products.id=product_id and status='active'));
+create policy public_variants on product_variants for select to anon,authenticated using(active and exists(select 1 from products where products.id=product_id and status='active'));
+create policy public_settings on store_settings for select to anon,authenticated using(true);
+create function touch_product() returns trigger language plpgsql as $$begin new.updated_at=now();return new;end$$;
+create trigger product_updated before update on products for each row execute function touch_product();
+create function immutable_items() returns trigger language plpgsql as $$begin raise exception 'Order snapshots are immutable';end$$;
+create trigger immutable_order_items before update or delete on order_items for each row execute function immutable_items();
+create function consume_rate(p_key text,p_limit int,p_seconds int) returns boolean language plpgsql security definer set search_path=public as $$declare n int;begin insert into rate_limits values(p_key,now(),1) on conflict(key) do update set hits=case when rate_limits.window_start<now()-make_interval(secs=>p_seconds) then 1 else rate_limits.hits+1 end,window_start=case when rate_limits.window_start<now()-make_interval(secs=>p_seconds) then now() else rate_limits.window_start end returning hits into n;return n<=p_limit;end$$;
+create function place_order(p jsonb,p_receipt_hash text) returns jsonb language plpgsql security definer set search_path=public as $$
+declare o orders;prod products;v product_variants;item jsonb;config jsonb;amount bigint:=0;delivery int;unit int;qty int;title text;code text;new_id uuid;fingerprint text:=encode(digest(p::text,'sha256'),'hex');
+begin
+perform pg_advisory_xact_lock(hashtextextended(p->>'key',0));
+select * into o from orders where idempotency_key=(p->>'key')::uuid;
+if found then if o.request_hash<>fingerprint or o.receipt_hash<>p_receipt_hash then raise exception 'Order request changed. Start a new checkout.';end if;return jsonb_build_object('order_number',o.order_number);end if;
+if jsonb_array_length(p->'items') not between 1 and 50 then raise exception 'Invalid cart';end if;
+select value into config from store_settings where id=1;
+if not coalesce((config->>'policies_reviewed')::boolean,false) then raise exception 'The store is not accepting orders yet.';end if;
+if not (p->>'phone' ~ coalesce(config->>'phone_pattern','^(\+92|0)3[0-9]{9}$')) then raise exception 'Enter a valid mobile number.';end if;
+select fee into delivery from shipping_rules where active and (region='' or lower(region)=lower(p->>'region')) and (city='' or lower(city)=lower(p->>'city')) order by (city<>'') desc,(region<>'') desc,fee desc limit 1;
+if delivery is null then raise exception 'Delivery is not available for this destination.';end if;
+insert into orders(idempotency_key,request_hash,receipt_hash,name,phone,email,region,city,address,landmark,notes,subtotal,shipping,total,currency,delivery_estimate) values((p->>'key')::uuid,fingerprint,p_receipt_hash,p->>'name',p->>'phone',p->>'email',p->>'region',p->>'city',p->>'address',p->>'landmark',p->>'notes',0,delivery,0,coalesce(config->>'currency','PKR'),coalesce(config->>'delivery_estimate','We will confirm your delivery details.')) returning id into new_id;
+for item in select value from jsonb_array_elements(p->'items') order by value->>'product_id',value->>'variant_id' loop
+qty:=(item->>'quantity')::int;if qty not between 1 and 99 then raise exception 'Invalid quantity';end if;
+select * into prod from products where id=(item->>'product_id')::uuid for update;
+if not found or prod.status<>'active' then raise exception 'An item is no longer available.';end if;
+unit:=prod.price;title:=prod.name;code:=prod.sku;
+if item->>'variant_id' is not null then
+select * into v from product_variants where id=(item->>'variant_id')::uuid and product_id=prod.id and active for update;
+if not found or v.stock<qty then raise exception 'An option has insufficient stock.';end if;
+update product_variants set stock=stock-qty where id=v.id;unit:=v.price;title:=title||' / '||v.name;code:=v.sku;
+else
+if exists(select 1 from product_variants where product_id=prod.id and active) then raise exception 'Choose a product option.';end if;
+if prod.stock<qty then raise exception 'An item has insufficient stock.';end if;
+update products set stock=stock-qty where id=prod.id;
+end if;
+amount:=amount+unit::bigint*qty;
+insert into order_items(order_id,product_id,variant_id,name,sku,price,quantity) values(new_id,prod.id,(item->>'variant_id')::uuid,title,code,unit,qty);
+end loop;
+update orders set subtotal=amount,total=amount+delivery where id=new_id returning * into o;
+insert into order_status_history(order_id,status) values(new_id,'Pending');
+return jsonb_build_object('order_number',o.order_number);
+end$$;
+create function change_order_status(p_id uuid,p_status text) returns void language plpgsql security definer set search_path=public as $$declare old_status text;item order_items;begin
+if not is_admin() then raise exception 'Unauthorized';end if;
+select status into old_status from orders where id=p_id for update;
+if not ((old_status='Pending' and p_status in ('Confirmed','Cancelled')) or (old_status='Confirmed' and p_status in ('Processing','Cancelled')) or (old_status='Processing' and p_status in ('Shipped','Cancelled')) or (old_status='Shipped' and p_status in ('Delivered','Returned')) or (old_status='Delivered' and p_status='Returned')) then raise exception 'Invalid status transition';end if;
+if p_status in ('Cancelled','Returned') then for item in select * from order_items where order_id=p_id order by product_id,variant_id loop if item.variant_id is null then update products set stock=stock+item.quantity where id=item.product_id;else update product_variants set stock=stock+item.quantity where id=item.variant_id;end if;end loop;end if;
+update orders set status=p_status where id=p_id;insert into order_status_history(order_id,status,changed_by) values(p_id,p_status,auth.uid());end$$;
+revoke all on function place_order(jsonb,text),consume_rate(text,int,int) from public,anon,authenticated;
+grant execute on function place_order(jsonb,text),consume_rate(text,int,int) to service_role;
+revoke all on function change_order_status(uuid,text) from public,anon;
+grant execute on function change_order_status(uuid,text) to authenticated;
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types) values('product-media','product-media',true,5242880,array['image/jpeg','image/png','image/webp']);
+create policy media_read on storage.objects for select to anon,authenticated using(bucket_id='product-media');
+create policy media_admin on storage.objects for all to authenticated using(bucket_id='product-media' and is_admin()) with check(bucket_id='product-media' and is_admin());
+create index products_category on products(category_id);
+create index order_items_order on order_items(order_id);
+create index history_order on order_status_history(order_id);
+create index orders_created on orders(created_at desc);

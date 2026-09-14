@@ -1,0 +1,3 @@
+import {requireAdmin} from '@/lib/db';
+import {CategoryEditor,CategoryDelete} from '@/components/admin';
+export default async function Categories(){const {data,error}=await(await requireAdmin()).from('categories').select('*').order('position');if(error)throw error;return <div className="stack"><h1>Categories & collections</h1><div className="panel stack"><h2>Add a collection</h2><CategoryEditor/></div>{data.map(c=><details className="panel" key={c.id}><summary>{c.name} · {c.active?'Active':'Inactive'} · Position {c.position}</summary><div className="stack"><CategoryEditor category={c}/><CategoryDelete id={c.id}/></div></details>)}</div>;}

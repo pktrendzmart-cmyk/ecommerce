@@ -1,0 +1,22 @@
+[
+  {
+    "id": "9f769af8-bb30-4643-93fe-003c20b13552",
+    "name": "car",
+    "slug": "nill",
+    "short_description": "uhfdnfs",
+    "description": "wjedidqh30e21jed",
+    "specifications": "wh32ogwqd",
+    "category_id": null,
+    "price": 10000,
+    "compare_at": null,
+    "sku": "01",
+    "stock": 11,
+    "status": "active",
+    "featured": false,
+    "bestseller": true,
+    "seo_title": "car",
+    "seo_description": "this is a car",
+    "created_at": "2026-09-10T14:48:57.495952+00:00",
+    "updated_at": "2026-09-10T14:48:57.495952+00:00"
+  }
+]

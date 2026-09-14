@@ -1,0 +1,5 @@
+import type {Product} from './model';
+// Set false to remove the temporary visual catalog.
+export const showPreviewProducts=false;
+const items=[['Air Loop Earbuds','Open-ear design | Comfortable, secure fit',699500,849500],['Beat Mini Speaker','Portable audio with a wireless microphone',559500,799500],['Pulse Pro Earbuds','Transparent charging case | Ambient blue light',759500,999500],['Moment Smart Watch','Round display | Classic tan strap',1499500,1999500]] as const;
+export const previewProducts:Product[]=items.map(([name,copy,price,compare_at],i)=>({id:`90000000-0000-4000-8000-00000000000${i+1}`,name,slug:'preview-'+name.toLowerCase().replaceAll(' ','-'),short_description:copy,description:'Temporary demo product for previewing the store design. This item is not available to order. Product details and pricing are illustrative.',specifications:'Design preview only',category_id:null,price,compare_at,sku:`PREVIEW-${i}`,stock:0,status:'active',featured:false,bestseller:false,seo_title:name,seo_description:copy,updated_at:new Date(0).toISOString(),product_images:[{id:`preview-image-${i}`,url:`/tech-products.png#${i}`,alt:name,position:0}],product_variants:[]}));
