@@ -1,33 +1,19 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import {ShoppingCart} from 'lucide-react';
-import {catalog,settings} from '@/lib/db';
+import {ShoppingCart,ShieldCheck,Truck,PackageCheck} from 'lucide-react';
+import {catalog,categories,settings} from '@/lib/db';
 import {money} from '@/lib/model';
 
 export default async function Home(){
-  const [s,products]=await Promise.all([settings(),catalog()]);
-  return <div className="home-redesign tech-home">
-    <section className="tech-banner wrap" aria-label="Featured collection">
-      <Image unoptimized src={s.hero_image||'/humidifier-banner.png'} alt={s.hero_title} fill priority sizes="100vw"/>
-      <div className="tech-banner-copy"><h1>{s.hero_title}</h1><p>{s.hero_copy}</p></div>
-      <Link className="explore-now" href={s.hero_link.startsWith('/products/')?s.hero_link:'/shop'}>Explore now</Link>
-    </section>
-    <section className="arrival-section wrap" aria-labelledby="arrivals-title">
-      <div className="section-heading"><h2 id="arrivals-title">New arrivals</h2><Link className="arrival-view-all" href="/shop">View all</Link></div>
-      <div className="arrival-grid">{products.slice(0,8).map(p=>{
-        const href='/products/'+p.slug;
-        return <article className="arrival-card" key={p.id}>
-          <Link href={href} className="arrival-image" aria-label={'View '+p.name}>{p.product_images[0]?<Image unoptimized src={p.product_images[0].url} alt={p.name} fill sizes="(max-width:767px) 75vw, 25vw"/>:<span>Image coming soon</span>}</Link>
-          <div className="arrival-info"><span className="arrival-badge">New arrival</span><Link href={href}><h3>{p.name}</h3></Link><p className="arrival-description">{p.short_description}</p>
-          <div className="arrival-meta"><span>{p.stock>0?'In stock':'Currently unavailable'}</span></div>
-          <div className="arrival-price"><div><strong>{money(p.price,s.currency)}</strong>{p.compare_at&&<del>{money(p.compare_at,s.currency)}</del>}</div><Link className="arrival-buy" href={href}><ShoppingCart size={16}/>Buy now</Link></div></div>
-        </article>;
-      })}</div>
-    </section>
-    {s.poster_image&&<section className="bestseller-poster wrap" aria-label={s.poster_title}>
-      <Image unoptimized src={s.poster_image} alt={s.poster_headline} fill sizes="100vw"/>
-      <h2 className="poster-label">{s.poster_title}</h2>
-      <div className="poster-copy"><p>{s.poster_eyebrow}</p><h3>{s.poster_headline}</h3><Link className="poster-link" href={s.poster_link.startsWith('/products/')?s.poster_link:'/shop'}>Explore product</Link></div>
-    </section>}
+  const [s,products,collections]=await Promise.all([settings(),catalog(),categories()]);
+  const bySlug=(slug:string)=>products.find(p=>p.slug===slug);
+  const heroProduct=bySlug(s.hero_product_slug),cactus=bySlug(s.side_banner_one_slug),trimmer=bySlug(s.side_banner_two_slug);
+  const category=(slug:string)=>{const value=collections.find(c=>c.slug===slug);return value&&{category:value,product:products.find(p=>p.category_id===value.id)}};
+  const featured=[category('beauty-care'),category('kids-toys'),category('grooming')].filter(Boolean) as {category:(typeof collections)[number],product:(typeof products)[number]|undefined}[];
+  return <div className="editorial-home">
+    <section className="campaign-hero" aria-labelledby="home-title"><div className="campaign-main"><Image unoptimized src={s.hero_image} alt={heroProduct?.name||'Featured product'} fill priority sizes="(max-width:900px) 100vw, 76vw"/><div className="campaign-copy"><h1 id="home-title">Comfort, care <em>and clever finds</em></h1><p>Thoughtfully selected products for a more comfortable, beautiful and joyful everyday—with cash on delivery across Pakistan.</p><Link className="button" href={heroProduct?'/products/'+heroProduct.slug:'/shop'}>Shop featured product</Link></div></div><div className="campaign-side">{cactus&&<Link href={'/products/'+cactus.slug}><Image unoptimized src={cactus.product_images[0].url} alt="" fill sizes="24vw"/><span><small>Featured find</small>{cactus.name}</span></Link>}{trimmer&&<Link href={'/products/'+trimmer.slug}><Image unoptimized src={trimmer.product_images[0].url} alt="" fill sizes="24vw"/><span><small>Featured find</small>{trimmer.name}</span></Link>}</div></section>
+    <section className="home-trust wrap" aria-label="Why shop with us"><div><ShieldCheck aria-hidden="true"/><span><strong>Cash on delivery</strong><small>Pay when your order arrives</small></span></div><div><Truck aria-hidden="true"/><span><strong>Nationwide delivery</strong><small>Delivered across Pakistan</small></span></div><div><PackageCheck aria-hidden="true"/><span><strong>Secure order tracking</strong><small>Follow every order securely</small></span></div></section>
+    <section className="editorial-categories wrap" aria-labelledby="categories-title"><div className="category-intro"><p className="eyebrow">Shop our collections</p><h2 id="categories-title">Made for everyday moments</h2><p>Explore personal care, playful finds and grooming essentials—all in one place.</p></div><div className="category-mosaic">{featured.map(({category,product},index)=><Link className={index===0?'category-feature':'category-mini'} href={'/collections/'+category.slug} key={category.id}>{product?.product_images[0]&&<Image unoptimized src={product.product_images[0].url} alt="" fill sizes={index===0?'45vw':'28vw'}/>}<span><strong>{category.name}</strong><small>{index===0?'Self-care made simple':index===1?'Playful finds for brighter days':'Confidence in your routine'}</small></span></Link>)}</div></section>
+    <section className="arrival-section wrap" aria-labelledby="arrivals-title"><div className="section-heading"><div><p className="eyebrow">New this week</p><h2 id="arrivals-title">Latest products</h2></div><Link className="arrival-view-all" href="/shop">View all products</Link></div><div className="arrival-grid">{products.slice(0,8).map(p=>{const href='/products/'+p.slug;return <article className="arrival-card" key={p.id}><Link href={href} className="arrival-image" aria-label={'View '+p.name}>{p.product_images[0]&&<Image unoptimized src={p.product_images[0].url} alt={p.name} fill sizes="(max-width:767px) 75vw, 25vw"/>}</Link><div className="arrival-info"><span className="arrival-badge">New</span><Link href={href}><h3>{p.name}</h3></Link><p className="arrival-description">{p.short_description}</p><div className="arrival-price"><div><strong>{money(p.price,s.currency)}</strong>{p.compare_at&&<del>{money(p.compare_at,s.currency)}</del>}</div><Link className="arrival-buy" href={href}><ShoppingCart size={16}/>View product</Link></div></div></article>})}</div></section>
   </div>;
 }
