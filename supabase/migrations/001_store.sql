@@ -26,7 +26,7 @@ create function immutable_items() returns trigger language plpgsql as $$begin ra
 create trigger immutable_order_items before update or delete on order_items for each row execute function immutable_items();
 create function consume_rate(p_key text,p_limit int,p_seconds int) returns boolean language plpgsql security definer set search_path=public as $$declare n int;begin insert into rate_limits values(p_key,now(),1) on conflict(key) do update set hits=case when rate_limits.window_start<now()-make_interval(secs=>p_seconds) then 1 else rate_limits.hits+1 end,window_start=case when rate_limits.window_start<now()-make_interval(secs=>p_seconds) then now() else rate_limits.window_start end returning hits into n;return n<=p_limit;end$$;
 create function place_order(p jsonb,p_receipt_hash text) returns jsonb language plpgsql security definer set search_path=public as $$
-declare o orders;prod products;v product_variants;item jsonb;config jsonb;amount bigint:=0;delivery int;unit int;qty int;title text;code text;new_id uuid;fingerprint text:=encode(digest(p::text,'sha256'),'hex');
+declare o orders;prod products;v product_variants;item jsonb;config jsonb;amount bigint:=0;delivery int;unit int;qty int;title text;code text;new_id uuid;fingerprint text:=encode(extensions.digest(p::text,'sha256'),'hex');
 begin
 perform pg_advisory_xact_lock(hashtextextended(p->>'key',0));
 select * into o from orders where idempotency_key=(p->>'key')::uuid;
