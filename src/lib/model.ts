@@ -4,6 +4,7 @@ const text=(max:number)=>z.string().trim().max(max);
 export const slug=z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120);
 export const lineSchema=z.object({product_id:z.uuid(),variant_id:z.uuid().nullable(),quantity:z.number().int().min(1).max(99)});
 export const checkoutSchema=z.object({key:z.uuid(),items:z.array(lineSchema).min(1).max(50),name:text(100).min(2),phone:text(30).min(8),email:z.union([z.email(),z.literal('')]),region:text(100).min(2),city:text(100).min(2),address:text(500).min(8),landmark:text(200),notes:text(1000)});
+export const reviewSchema=z.object({product_id:z.uuid(),name:text(60).min(2),rating:z.number().int().min(1).max(5),comment:text(1000).min(3)});
 export const productSchema=z.object({id:z.uuid().optional(),name:text(160).min(2),slug,short_description:text(300),description:text(10000),specifications:text(5000),category_id:z.uuid().nullable(),price:z.number().int().min(0).max(100000000),compare_at:z.number().int().min(0).max(100000000).nullable(),shipping_fee:z.number().int().min(0).max(100000000).nullable(),sku:text(80).min(1),stock:z.number().int().min(0).max(1000000),status:z.enum(['draft','active','archived']),featured:z.boolean(),bestseller:z.boolean(),seo_title:text(160),seo_description:text(300)}).refine(p=>p.compare_at===null||p.compare_at>p.price,{message:'Compare-at price must exceed selling price',path:['compare_at']});
 export const statuses=['Pending','Confirmed','Processing','Shipped','Delivered','Cancelled','Returned'] as const;
 export function canTransition(from:string,to:string){return ({Pending:['Confirmed','Cancelled'],Confirmed:['Processing','Cancelled'],Processing:['Shipped','Cancelled'],Shipped:['Delivered','Returned'],Delivered:['Returned']} as Record<string,string[]>)[from]?.includes(to)??false;}
@@ -14,3 +15,4 @@ export type Media={id:string;url:string;alt:string;position:number;media_type?:'
 export type Variant={id:string;name:string;sku:string;price:number;stock:number;active:boolean};
 export type Category={id:string;name:string;slug:string;description:string;image:string;seo_title:string;seo_description:string;position:number;active:boolean};
 export type CartLine=z.infer<typeof lineSchema>&{name:string;price:number;image:string;slug:string};
+export type Review={id:string;product_id:string;name:string;rating:number;comment:string;created_at:string};
