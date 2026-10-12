@@ -4,6 +4,12 @@
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-10-11",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "vars": {
+    "NEXT_PUBLIC_META_PIXEL_ID": "1780289229808193",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_hTUJ7wLpHOKk4x4uT4VKoQ_jaeF1EX_",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://euuyzwiyegmbwvfzuxga.supabase.co",
+    "SITE_URL": "https://www.pktrendzmart.com"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
